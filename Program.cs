@@ -21,10 +21,6 @@ namespace Digits
         public List<List<int>> layers;
         public List<List<List<double>>> weights;
         public List<List<double>> biases;
-        public List<List<double>> gradients;
-        public List<List<int>> tests;
-        public List<int> tests_results;
-        public List<List<int>> input;
         public double progress = 1;
         public List<double> globalCost = Enumerable.Repeat(1.0, 10).ToList();
         public Random rand = new Random();
@@ -78,7 +74,7 @@ namespace Digits
                 return;
             }
 
-            using var sr = new StreamReader(@"C:\Users\Fagner\source\repos\digits\save.txt");
+            using var sr = new StreamReader(filename);
             for (int i = 0; i < weights.Count; i++)
             {
                 for (int j = 0; j < weights[i].Count; j++)
@@ -98,7 +94,7 @@ namespace Digits
 
         public void Save()
         {
-            StreamWriter sw = new(@"C:\Users\Fagner\source\repos\digits\save.txt");
+            StreamWriter sw = new(@"save.txt");
             string s = "";
             for (int i = 0; i < weights.Count; i++)
             {
@@ -281,7 +277,7 @@ namespace Digits
             if (cost.Average(x => Math.Abs(x)) < progress)
             {
                 progress = cost.Average(x => Math.Abs(x));
-                StreamWriter sw = new StreamWriter(@"C:\Users\Fagner\source\repos\digits\progress.txt", true);
+                StreamWriter sw = new StreamWriter(@"progress.txt", true);
                 sw.WriteLine(progress);
                 sw.Close();
             }
@@ -431,11 +427,11 @@ namespace Digits
             Console.WriteLine("\nBegin\n");
 
             FileStream ifsLabels =
-             new FileStream(@"C:\Users\Fagner\source\repos\digits\t10k-labels.idx1-ubyte",
+             new FileStream(@"t10k-labels.idx1-ubyte",
              FileMode.Open); // test labels
 
             FileStream ifsImages =
-             new FileStream(@"C:\Users\Fagner\source\repos\digits\t10k-images.idx3-ubyte",
+             new FileStream(@"t10k-images.idx3-ubyte",
              FileMode.Open); // test images
 
             BinaryReader brLabels = new BinaryReader(ifsLabels);
@@ -518,7 +514,7 @@ namespace Digits
             Loader loader = new Loader();
             var result = loader.Load(10000);
 
-            var net = new Network();
+            var net = new Network(@"save.txt");
             for (int i = 0; i < 1; i++)
             {
                 net.StochasticGradientDescent(result.Data, result.Result, 30, 3, 10);
