@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "/RKTWUHrpQc1os69Qa7dH0aZCkeUHXqO22Cs6BSMnUK3EdHjQd2nlSexuCaDtwLXw7tQcAwtg3g0C3VqKfqT9Q==",
+  "dgSpecHash": "yY1sjSHAWsi0cGF5m5G1Nh6Cv8duvAOTtUjtAyfjiaNskGeZDpwxYcw6NfhfKc9vfg12kQoPI4ZLO3NRTrjMFQ==",
   "success": true,
-  "projectFilePath": "C:\\Users\\Fagner\\Source\\Repos\\fagner02\\DigitsIdentifier\\digits.csproj",
+  "projectFilePath": "C:\\Users\\Fagner\\source\\repos\\fagner02\\DigitsIdentifier\\digits.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }

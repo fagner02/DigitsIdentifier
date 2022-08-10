@@ -26,7 +26,7 @@ namespace Digits
         public Random rand = new Random();
         public Network(string? filename = null)
         {
-            sizes = new List<int>() { 784, 30, 16, 10 };
+            sizes = new List<int>() { 784, 50, 50, 10 };
 
             layers = new List<List<int>>() {
                 Enumerable.Repeat(0, sizes[0]).ToList(),
@@ -92,6 +92,20 @@ namespace Digits
             }
         }
 
+        public void Print()
+        {
+            Console.WriteLine("weights");
+            weights
+                .ForEach(i =>
+                    i.ForEach(j =>
+                        j.ForEach(k => Console.Write(k.ToString()+", "))));
+
+            Console.WriteLine("biases");
+            biases
+                .ForEach(i =>
+                    i.ForEach(j => Console.Write(j.ToString()+", ")));
+        }
+
         public void Save()
         {
             StreamWriter sw = new(@"save.txt");
@@ -125,7 +139,7 @@ namespace Digits
                     {
                         sigmoidOut += weights[i][j][k] * layer[k];
                     }
-                    newLayer.Add(sigmoidOut + biases[i][j]);
+                    newLayer.Add((sigmoidOut / 10.0) + biases[i][j]);
                 }
                 layer = Sigmoid(newLayer);
             }
@@ -146,12 +160,15 @@ namespace Digits
         {
             if (test)
             {
+                var hit = 0.0;
                 Console.WriteLine("test");
                 for (int x = 0; x < data.Count; x++)
                 {
                     var res = FeedForward(data[x]);
                     Console.WriteLine(res.IndexOf(res.Max()).ToString() + " " + expectedResults[x].IndexOf(expectedResults[x].Max()));
+                    hit += res.IndexOf(res.Max()) == expectedResults[x].IndexOf(expectedResults[x].Max()) ? 1 : 0;
                 }
+                Console.WriteLine(hit / data.Count);
                 return;
             }
 
@@ -163,7 +180,7 @@ namespace Digits
                 {
                     List<List<double>> batches = new();
                     List<List<double>> batchesRes = new();
-                    for (int k = 0; k < batchSize; k ++)
+                    for (int k = 0; k < batchSize; k++)
                     {
                         var index = Convert.ToInt32((data.Count - 1) * rand.NextDouble());
                         batches.Add(data[index]);
@@ -175,7 +192,7 @@ namespace Digits
                 }
                 Save();
             }
-            
+
         }
 
         public void UpdateNetworkValues(List<List<double>> batches, List<List<double>> expectedResults, double learningRate)
@@ -262,7 +279,7 @@ namespace Digits
                     {
                         sigmoidOut += weights[i][j][k] * activations[i][k];
                     }
-                    layer.Add((sigmoidOut/10.0) + biases[i][j]);
+                    layer.Add((sigmoidOut / 10.0) + biases[i][j]);
                 }
 
                 zValues.Add(layer);
@@ -422,7 +439,7 @@ namespace Digits
     class Loader
     {
         private readonly List<double> chars = new() { 32, 46, 45, 42, 43, 35, 64, 72, 69 };
-        public response Load(int take)
+        public response Load(int take, bool print = false)
         {
             Console.WriteLine("\nBegin\n");
 
@@ -453,7 +470,12 @@ namespace Digits
                 var pixels = new List<double>();
                 for (int i = 0; i < 784; i++)
                 {
-                    pixels.Add(brImages.ReadByte() / 255.0);
+                    var b = brImages.ReadByte();
+                    pixels.Add(b / 255.0);
+                    if (print)
+                    {
+                        Console.Write(b.ToString() + ", ");
+                    }
                 }
                 result.Add(pixels);
 
@@ -512,12 +534,12 @@ namespace Digits
         static void Main()
         {
             Loader loader = new Loader();
-            var result = loader.Load(10000);
+            var result = loader.Load(1000);
 
             var net = new Network(@"save.txt");
             for (int i = 0; i < 1; i++)
             {
-                net.StochasticGradientDescent(result.Data, result.Result, 30, 3, 10);
+                net.StochasticGradientDescent(result.Data, result.Result, 30, 3, 10, true);
             }
         }
     }
