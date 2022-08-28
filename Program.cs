@@ -2,6 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Digits
 {
@@ -15,18 +16,60 @@ namespace Digits
             Weights = weights;
         }
     }
+    class ConvBackpropagationResponse
+    {
+        public List<List<double>> Biases;
+        public List<List<List<List<double>>>> Filters;
+        public ConvBackpropagationResponse(List<List<double>> biases, List<List<List<List<double>>>> filters)
+        {
+            Biases = biases;
+            Filters = filters;
+        }
+    }
     class Network
     {
         public List<int> sizes;
+        public List<int> convolutionalSizes;
         public List<List<int>> layers;
         public List<List<List<double>>> weights;
+        public List<List<List<List<double>>>> filters;
         public List<List<double>> biases;
+        public List<List<double>> convolutionBiases;
+        public int lines = 28;
+        public int columns = 28;
+        public int poolSize = 2;
+        public int stride = 2;
+        public int filterSize = 3;
         public double progress = 1;
         public List<double> globalCost = Enumerable.Repeat(1.0, 10).ToList();
         public Random rand = new Random();
         public Network(string? filename = null)
         {
-            sizes = new List<int>() { 784, 50, 50, 10 };
+
+            convolutionalSizes = new List<int>() { 9, 5 };
+
+            var inp = new List<int>() { lines };
+
+            for (int i = 0; i < convolutionalSizes.Count; i++)
+            {
+                var l = new List<int>();
+                for (int j = 0; j < inp.Count; j++)
+                {
+                    for (int k = 0; k < convolutionalSizes[i]; k++)
+                    {
+                        l.Add((int)Math.Ceiling((double)(inp[j] - filterSize + 1) / stride));
+                    }
+                }
+                inp = l;
+            }
+
+            int size = 0;
+            for (int i = 0; i < inp.Count; i++)
+            {
+                size += inp[i] * inp[i];
+            }
+
+            sizes = new List<int>() { size, 50, 50, 10 };
 
             layers = new List<List<int>>() {
                 Enumerable.Repeat(0, sizes[0]).ToList(),
@@ -70,24 +113,68 @@ namespace Digits
                         biases[i][j] = rand.NextDouble();
                     }
                 }
+
+                filters = new List<List<List<List<double>>>>();
+                convolutionBiases = new List<List<double>>();
+                for (int i = 0; i < convolutionalSizes.Count; i++)
+                {
+                    filters.Add(new List<List<List<double>>>());
+                    convolutionBiases.Add(new List<double>());
+                    for (int n = 0; n < convolutionalSizes[i]; n++)
+                    {
+                        filters[i].Add(new List<List<double>>());
+                        for (int j = 0; j < filterSize; j++)
+                        {
+                            filters[i][n].Add(new List<double>());
+                            for (int k = 0; k < filterSize; k++)
+                            {
+                                filters[i][n][j].Add(rand.NextDouble());
+                            }
+                        }
+                        convolutionBiases[i].Add(rand.NextDouble());
+                    }
+                }
                 Save();
                 return;
             }
 
-            using var sr = new StreamReader(filename);
-            for (int i = 0; i < weights.Count; i++)
+            using (var sr = File.OpenRead(filename))
             {
-                for (int j = 0; j < weights[i].Count; j++)
+                var br = new BinaryReader(sr);
+                for (int i = 0; i < weights.Count; i++)
                 {
-                    double temp;
-                    for (int k = 0; k < weights[i][j].Count; k++)
+                    for (int j = 0; j < weights[i].Count; j++)
                     {
-                        double.TryParse(sr.ReadLine(), out temp);
-                        weights[i][j][k] = temp;
+                        for (int k = 0; k < weights[i][j].Count; k++)
+                        {
+                            weights[i][j][k] = br.ReadDouble();
+                        }
+                        biases[i][j] = br.ReadDouble();
                     }
-
-                    double.TryParse(sr.ReadLine(), out temp);
-                    biases[i][j] = temp;
+                }
+            }
+            using (var sr = File.OpenRead("conv-save.txt"))
+            {
+                var br = new BinaryReader(sr);
+                filters = new List<List<List<List<double>>>>();
+                convolutionBiases = new List<List<double>>();
+                for (int i = 0; i < convolutionalSizes.Count; i++)
+                {
+                    filters.Add(new List<List<List<double>>>());
+                    convolutionBiases.Add(new List<double>());
+                    for (int n = 0; n < convolutionalSizes[i]; n++)
+                    {
+                        filters[i].Add(new List<List<double>>());
+                        for (int j = 0; j < filterSize; j++)
+                        {
+                            filters[i][n].Add(new List<double>());
+                            for (int k = 0; k < filterSize; k++)
+                            {
+                                filters[i][n][j].Add(br.ReadDouble());
+                            }
+                        }
+                        convolutionBiases[i].Add(br.ReadDouble());
+                    }
                 }
             }
         }
@@ -98,17 +185,18 @@ namespace Digits
             weights
                 .ForEach(i =>
                     i.ForEach(j =>
-                        j.ForEach(k => Console.Write(k.ToString()+", "))));
+                        j.ForEach(k => Console.Write(k.ToString() + ", "))));
 
             Console.WriteLine("biases");
             biases
                 .ForEach(i =>
-                    i.ForEach(j => Console.Write(j.ToString()+", ")));
+                    i.ForEach(j => Console.Write(j.ToString() + ", ")));
         }
 
         public void Save()
         {
-            StreamWriter sw = new(@"save.txt");
+            var sw = File.Open(@"save.txt", FileMode.Create);
+            BinaryWriter bw = new BinaryWriter(sw);
             string s = "";
             for (int i = 0; i < weights.Count; i++)
             {
@@ -116,14 +204,31 @@ namespace Digits
                 {
                     for (int k = 0; k < weights[i][j].Count; k++)
                     {
-                        s += weights[i][j][k].ToString() + '\n';
+                        bw.Write(weights[i][j][k]);
                     }
-                    s += biases[i][j].ToString() + '\n';
+                    bw.Write(biases[i][j]);
                 }
             }
-            sw.WriteLine(s);
             sw.Close();
-            Console.WriteLine(globalCost);
+
+            sw = new("conv-save.txt", FileMode.Create);
+            bw = new(sw);
+
+            for (int i = 0; i < filters.Count; i++)
+            {
+                for (int n = 0; n < filters[i].Count; n++)
+                {
+                    for (int j = 0; j < filters[i][n].Count; j++)
+                    {
+                        for (int k = 0; k < filters[i][n][j].Count; k++)
+                        {
+                            bw.Write(filters[i][n][j][k]);
+                        }
+                    }
+                    bw.Write(convolutionBiases[i][n]);
+                }
+            }
+            sw.Close();
         }
 
         public List<double> FeedForward(List<double> layer)
@@ -164,7 +269,7 @@ namespace Digits
                 Console.WriteLine("test");
                 for (int x = 0; x < data.Count; x++)
                 {
-                    var res = FeedForward(data[x]);
+                    var res = FeedForward(ConvolutionalFeedFoward(data[x]));
                     Console.WriteLine(res.IndexOf(res.Max()).ToString() + " " + expectedResults[x].IndexOf(expectedResults[x].Max()));
                     hit += res.IndexOf(res.Max()) == expectedResults[x].IndexOf(expectedResults[x].Max()) ? 1 : 0;
                 }
@@ -197,9 +302,6 @@ namespace Digits
 
         public void UpdateNetworkValues(List<List<double>> batches, List<List<double>> expectedResults, double learningRate)
         {
-            //    nabla_b = [np.zeros(b.shape) for b in self.biases]
-            //nabla_w = [np.zeros(w.shape) for w in self.weights]
-
             var newWeights = new List<List<List<double>>>();
 
             for (int k = 0; k < sizes.Count - 1; k++)
@@ -224,7 +326,7 @@ namespace Digits
 
             for (int n = 0; n < batches.Count; n++)
             {
-                var result = Backpropagation(batches[n], expectedResults[n]);
+                var result = Backpropagation(ConvolutionalFeedFoward(batches[n]), expectedResults[n]);
                 for (int i = 0; i < newWeights.Count; i++)
                 {
                     for (int j = 0; j < newWeights[i].Count; j++)
@@ -261,10 +363,58 @@ namespace Digits
                     biases[i][j] -= newBiases[i][j];
                 }
             }
+
+            var convolutionValues = ConvolutionalBackpropagation(batches[0]);
+            for (int i = 1; i < batches.Count; i++)
+            {
+                convolutionValues = SumBackpropagationValues(convolutionValues, ConvolutionalBackpropagation(batches[0]));
+            }
+
+            for (int i = 0; i < convolutionValues.Filters.Count; i++)
+            {
+                for (int j = 0; j < convolutionValues.Filters[i].Count; j++)
+                {
+                    for (int k = 0; k < convolutionValues.Filters[i][j].Count; k++)
+                    {
+                        for (int n = 0; n < convolutionValues.Filters[i][j][k].Count; n++)
+                        {
+                            filters[i][j][k][n] -= (learningRate / (100 * batches.Count)) * convolutionValues.Filters[i][j][k][n];
+                        }
+                    }
+                    convolutionBiases[i][j] -= (learningRate / (batches.Count * 100)) * convolutionValues.Biases[i][j];
+                }
+            }
         }
+
+        public ConvBackpropagationResponse SumBackpropagationValues(ConvBackpropagationResponse a, ConvBackpropagationResponse b)
+        {
+            var result = new ConvBackpropagationResponse(a.Biases, a.Filters);
+            for (int i = 0; i < a.Filters.Count; i++)
+            {
+                for (int j = 0; j < a.Filters[i].Count; j++)
+                {
+                    for (int k = 0; k < a.Filters[i][j].Count; k++)
+                    {
+                        for (int n = 0; n < a.Filters[i][j][k].Count; n++)
+                        {
+                            result.Filters[i][j][k][n] += b.Filters[i][j][k][n];
+                        }
+                    }
+                    result.Biases[i][j] += b.Biases[i][j];
+                }
+            }
+            return result;
+        }
+
 
         public BackpropagationResponse Backpropagation(List<double> input, List<double> expectedResult)
         {
+            double max = input.Max();
+            for (int i = 0; i < input.Count; i++)
+            {
+                input[i] /= max;
+            }
+            
             var activations = new List<List<double>>() { input };
 
             var zValues = new List<List<double>>();
@@ -413,6 +563,412 @@ namespace Digits
             return result;
         }
 
+        public ConvBackpropagationResponse ConvolutionalBackpropagation(List<double> flattenInput)
+        {
+            var input = new List<List<double>>() { };
+            for (int i = 0; i < lines; i++)
+            {
+                input.Add(new List<double>());
+                for (int j = 0; j < columns; j++)
+                {
+                    input[i].Add(flattenInput[i * lines + j]);
+                }
+            }
+            var ps = new List<List<List<List<double>>>>() { new List<List<List<double>>>() { input } };
+            var cs = new List<List<List<List<double>>>>();
+            var zs = new List<List<List<List<double>>>>();
+            for (int i = 0; i < filters.Count; i++)
+            {
+                zs.Add(new List<List<List<double>>>());
+                ps.Add(new List<List<List<double>>>());
+                cs.Add(new List<List<List<double>>>());
+                for (int j = 0; j < ps[i].Count; j++)
+                {
+                    for (int k = 0; k < filters[i].Count; k++)
+                    {
+                        zs.Last().Add(Convolution(ps[i][j], filters[i][k], convolutionBiases[i][k]));
+                        cs.Last().Add(ReLu(zs[i].Last()));
+                        ps.Last().Add(Pooling(cs[i].Last()));
+                    }
+                }
+            }
+
+            var f = new List<double>();
+            for (int i = 0; i < ps[ps.Count - 1].Count; i++)
+            {
+                for (int j = 0; j < ps[ps.Count - 1][i].Count; j++)
+                {
+                    for (int k = 0; k < ps[ps.Count - 1][i][j].Count; k++)
+                    {
+                        f.Add(ps[ps.Count - 1][i][j][k]);
+                    }
+                }
+            }
+
+            var df = new List<double>();
+
+            var transposed = Transpose(weights.First());
+
+            for (int j = 0; j < transposed.Count; j++)
+            {
+                double sigmoidOut = 0;
+                for (int k = 0; k < transposed[j].Count; k++)
+                {
+                    sigmoidOut += transposed[j][k] * f[j];
+                }
+                df.Add(sigmoidOut);
+            }
+
+            var dp = new List<List<List<double>>>();
+            for (int i = 0; i < ps[ps.Count - 1].Count; i++)
+            {
+                dp.Add(new List<List<double>>());
+                for (int j = 0; j < ps[ps.Count - 1][i].Count; j++)
+                {
+                    dp[i].Add(new List<double>());
+                    for (int k = 0; k < ps[ps.Count - 1][i][j].Count; k++)
+                    {
+                        dp[i][j].Add(df[j * ps[ps.Count - 1][i].Count + k]);
+                    }
+                }
+                df = df.Skip(ps[ps.Count - 1][i].Count * ps[ps.Count - 1][i].Count).ToList();
+            }
+
+            var dc = DcCalc(cs.Last(), dp);
+
+            var zRect = RectZ(zs.Last());
+
+            var dz = MatrixMultiplication(dc, zRect);
+
+            var newFilters = new List<List<List<List<double>>>>(filters);
+            newFilters[newFilters.Count - 1] = BackConvolution(dz, ps[ps.Count - 2], true);
+
+            var newBiases = new List<List<double>>(convolutionBiases);
+            for (int i = 0; i < newBiases.Last().Count; i++)
+            {
+                newBiases.Last()[i] = (dz[i].Aggregate(0.0, (x, y) => x + y.Sum())) / (dz[i].Count * dz[i][0].Count);
+            }
+
+            for (int i = filters.Count - 2; i > -1; i--)
+            {
+                var paddedZ = AddPadding(zs[i + 1]);
+
+                var rotatedFilters = Rotate(filters[i + 1]);
+
+                dp = BackConvolution(paddedZ, rotatedFilters);
+
+                dc = DcCalc(cs[i], dp);
+
+                zRect = RectZ(zs[i]);
+
+                dz = MatrixMultiplication(dc, zRect);
+
+                if (i < 1)
+                {
+                    newFilters[i] = BackConvolution(dz, ps[0], true);
+                }
+                else
+                {
+                    newFilters[i] = BackConvolution(dz, ps[i - 1], true);
+                }
+
+                for (int m = 0; m < newBiases[i].Count; m++)
+                {
+                    newBiases[i][m] = (dz[m].Aggregate(0.0, (x, y) => x + y.Sum())) / (dz[m].Count * dz[m][0].Count);
+                }
+            }
+            Console.WriteLine("Propagation done");
+            return new ConvBackpropagationResponse(newBiases, newFilters);
+        }
+
+        public List<List<List<double>>> BackConvolution(List<List<List<double>>> paddedZ, List<List<List<double>>> rotatedFilters, bool reverse = false)
+        {
+            var dp = new List<List<List<double>>>();
+            for (int j = 0; j < paddedZ.Count / rotatedFilters.Count; j++)
+            {
+                var layer = paddedZ.Skip(j * rotatedFilters.Count).Take(rotatedFilters.Count).ToList();
+
+                for (int k = 0; k < layer.Count; k++)
+                {
+                    if (reverse)
+                    {
+                        layer[k] = Convolution(rotatedFilters[k], layer[k]);
+                        continue;
+                    }
+                    layer[k] = Convolution(layer[k], rotatedFilters[k]);
+                }
+
+                var res = layer.Skip(1).Aggregate(layer.First(), (x, y) =>
+                {
+                    for (int n = 0; n < x.Count; n++)
+                    {
+                        for (int m = 0; m < x[n].Count; m++)
+                        {
+                            x[n][m] += y[n][m];
+                        }
+                    }
+                    return x;
+                });
+                var basis = 1.0;
+                if (reverse)
+                {
+                    basis = 100;
+                }
+
+                for (int i = 0; i < res.Count; i++)
+                {
+                    for (int k = 0; k < res[i].Count; k++)
+                    {
+                        res[i][k] = (res[i][k] / layer.Count);
+                    }
+                }
+                dp.Add(res);
+            }
+
+            return dp;
+        }
+        public List<List<List<double>>> MatrixMultiplication(List<List<List<double>>> input, List<List<List<double>>> zRect)
+        {
+            var dz = new List<List<List<double>>>();
+            for (int i = 0; i < input.Count; i++)
+            {
+                dz.Add(new List<List<double>>());
+                for (int j = 0; j < input[i].Count; j++)
+                {
+                    dz[i].Add(new List<double>());
+                    for (int n = 0; n < zRect[i][0].Count; n++)
+                    {
+                        double output = 0;
+                        for (int k = 0; k < zRect[i].Count; k++)
+                        {
+                            output += input[i][j][k] * zRect[i][k][n];
+                        }
+                        dz[i][j].Add(output);
+                    }
+                }
+            }
+
+            return dz;
+        }
+
+        public List<List<List<double>>> DcCalc(List<List<List<double>>> input, List<List<List<double>>> dp)
+        {
+            var dc = new List<List<List<double>>>(input);
+            for (int i = 0; i < dc.Count; i++)
+            {
+                var layer = new List<double>();
+                for (int j = 0; j < dc[i].Count; j += stride)
+                {
+                    for (int m = 0; m < dc[i][j].Count; m += stride)
+                    {
+                        var x = j;
+                        var y = m;
+                        for (int k = 0; k < poolSize; k++)
+                        {
+                            for (int n = 1; n < poolSize; n++)
+                            {
+                                if (j + k + 1 >= dc[i].Count || m + n + 1 >= dc[i][j + k].Count)
+                                {
+                                    continue;
+                                }
+                                if (dc[i][j + k][m + n] > dc[i][x][y])
+                                {
+                                    x = j + k;
+                                    y = m + n;
+                                }
+                                dc[i][j + k][m + n] = 0;
+                            }
+                        }
+                        dc[i][x][y] = dp[i][(int)Math.Floor(((double)x) / stride)][(int)Math.Floor(((double)y) / stride)];
+                    }
+                }
+            }
+
+            return dc;
+        }
+
+        public List<List<List<double>>> Rotate(List<List<List<double>>> input)
+        {
+            var rotated = new List<List<List<double>>>(input);
+            for (int i = 0; i < input.Count; i++)
+            {
+                for (int j = 0; j < input[i].Count; j++)
+                {
+                    for (int k = 0; k < input[i].Count; k++)
+                    {
+                        rotated[i][(j + 1) / input[i].Count][(k + 1) / input[i][j].Count] = input[i][j][k];
+                    }
+                }
+            }
+            return rotated;
+        }
+
+        public List<List<List<double>>> AddPadding(List<List<List<double>>> input)
+        {
+            var padding = 2 * filterSize - 2;
+            var paddedZ = new List<List<List<double>>>();
+            for (int j = 0; j < input.Count; j++)
+            {
+                paddedZ.Add(new List<List<double>>());
+                for (int k = 0; k < input[j].Count + padding; k++)
+                {
+                    paddedZ[j].Add(new List<double>());
+
+                    int l = (k < padding / 2 || k >= input[j].Count + 1) ? 0 : k;
+
+                    for (int n = 0; n < input[j][Math.Abs(l - 1)].Count + padding; n++)
+                    {
+                        int c = n < padding / 2 || n >= input[j][Math.Abs(l - 1)].Count + 1 ? 0 : n;
+
+                        if (l == 0 || c == 0)
+                        {
+                            paddedZ[j][k].Add(0);
+                            continue;
+                        }
+                        paddedZ[j][k].Add(input[j][l - 1][c - 1]);
+                    }
+                }
+            }
+
+            return paddedZ;
+        }
+
+        public List<double> Flatten(List<List<List<double>>> input)
+        {
+            var f = new List<double>();
+            for (int i = 0; i < input.Count; i++)
+            {
+                for (int j = 0; j < input[i].Count; j++)
+                {
+                    for (int k = 0; k < input[i][j].Count; k++)
+                    {
+                        f.Add(input[i][j][k]);
+                    }
+                }
+            }
+            return f;
+        }
+
+        public List<List<List<double>>> RectZ(List<List<List<double>>> z)
+        {
+            var zRect = new List<List<List<double>>>(z);
+
+            for (int i = 0; i < zRect.Count; i++)
+            {
+                for (int j = 0; j < zRect[i].Count; j++)
+                {
+                    for (int k = 0; k < zRect[i][j].Count; k++)
+                    {
+                        zRect[i][j][k] = zRect[i][j][k] > 0 ? 1 : 0;
+                    }
+                }
+            }
+
+            return zRect;
+        }
+
+        public List<double> ConvolutionalFeedFoward(List<double> flattenInput)
+        {
+            var input = new List<List<double>>() { };
+            for (int i = 0; i < lines; i++)
+            {
+                input.Add(new List<double>());
+                for (int j = 0; j < columns; j++)
+                {
+                    input[i].Add(flattenInput[i * lines + j]);
+                }
+            }
+            var layer = new List<List<List<double>>>() { input };
+            for (int i = 0; i < filters.Count; i++)
+            {
+                var newLayer = new List<List<List<double>>>();
+                for (int j = 0; j < layer.Count; j++)
+                {
+                    for (int k = 0; k < filters[i].Count; k++)
+                    {
+                        var z = Convolution(layer[j], filters[i][k], convolutionBiases[i][k]);
+                        var c = ReLu(z);
+                        var p = Pooling(c);
+                        newLayer.Add(p);
+                    }
+                }
+                layer = newLayer;
+            }
+            return Flatten(layer);
+        }
+
+        public List<List<double>> Convolution(List<List<double>> input, List<List<double>> filter, double? bias = null)
+        {
+            bias ??= 0;
+            var result = new List<List<double>>();
+            for (int i = 0; i < input.Count - filter.Count + 1; i++)
+            {
+                var dot = new List<double>();
+                for (int j = 0; j < input[i].Count - filter[0].Count + 1; j++)
+                {
+                    double output = 0;
+                    for (int k = 0; k < filter.Count; k++)
+                    {
+                        for (int n = 0; n < filter[k].Count; n++)
+                        {
+                            output += input[i + k][j + n] * filter[k][n];
+                        }
+                    }
+                    output /= filter.Count * filter.Count;
+                    dot.Add((double)(output + bias));
+                }
+                result.Add(dot);
+            }
+            return result;
+        }
+
+        public List<List<double>> Pooling(List<List<double>> input)
+        {
+            var result = new List<List<double>>();
+            for (int i = 0; i < input.Count; i += stride)
+            {
+                var layer = new List<double>();
+                for (int j = 0; j < input[i].Count; j += stride)
+                {
+                    double output = input[i][j];
+                    for (int k = 0; k < poolSize; k++)
+                    {
+                        if (i + k >= input.Count) continue;
+
+                        for (int n = 1; n < poolSize; n++)
+                        {
+                            if (j + n >= input[i].Count) continue;
+
+                            if (input[i + k][j + n] > output) output = input[i + k][j + n];
+                        }
+                    }
+                    layer.Add(output);
+                }
+                result.Add(layer);
+            }
+            return result;
+        }
+
+        public List<List<double>> ReLu(List<List<double>> input)
+        {
+            var result = new List<List<double>>(input);
+            result.AsParallel().ForAll(x =>
+            {
+                x.AsParallel().ForAll(y =>
+                {
+                    y = Math.Abs(y);
+                });
+            });
+            //for (int i = 0; i < input.Count; i++)
+            //{
+            //    for (int j = 0; j < input[i].Count; j++)
+            //    {
+            //        result[i][j] = Math.Abs(input[i][j]);
+            //    }
+            //}
+            return result;
+        }
+
         public void Evaluate(List<double> tests)
         {
             for (int i = 0; i < tests.Count; i++)
@@ -444,11 +1000,11 @@ namespace Digits
             Console.WriteLine("\nBegin\n");
 
             FileStream ifsLabels =
-             new FileStream(@"t10k-labels.idx1-ubyte",
+             new FileStream(@"train-labels.idx1-ubyte",
              FileMode.Open); // test labels
 
             FileStream ifsImages =
-             new FileStream(@"t10k-images.idx3-ubyte",
+             new FileStream(@"train-images.idx3-ubyte",
              FileMode.Open); // test images
 
             BinaryReader brLabels = new BinaryReader(ifsLabels);
@@ -463,6 +1019,11 @@ namespace Digits
             int magic2 = brLabels.ReadInt32();
             int numLabels = brLabels.ReadInt32();
 
+            if (print)
+            {
+                Print(brImages, brLabels);
+                return new response(new List<List<double>>(), new List<List<double>>());
+            }
             var results = new List<List<double>>();
             var result = new List<List<double>>();
             for (int di = 0; di < take; di++)
@@ -534,12 +1095,12 @@ namespace Digits
         static void Main()
         {
             Loader loader = new Loader();
-            var result = loader.Load(1000);
+            var result = loader.Load(60000);
 
-            var net = new Network(@"save.txt");
+            var net = new Network();
             for (int i = 0; i < 1; i++)
             {
-                net.StochasticGradientDescent(result.Data, result.Result, 30, 3, 10, true);
+                net.StochasticGradientDescent(result.Data, result.Result, 30, 3, 10);
             }
         }
     }
