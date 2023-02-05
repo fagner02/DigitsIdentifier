@@ -48,7 +48,7 @@ namespace Digits
         public Network(string? filename = null)
         {
 
-            convolutionalSizes = new List<int>() { 9, 5 };
+            convolutionalSizes = new List<int>() { 28, 28, 28 };
 
             var inp = new List<int>() { lines };
 
@@ -134,7 +134,7 @@ namespace Digits
                 return;
             }
 
-            using (var sr = File.OpenRead(filename))
+            using (var sr = File.OpenRead("save.txt"))
             {
                 var br = new BinaryReader(sr);
                 for (int i = 0; i < weights.Count; i++)
@@ -357,21 +357,9 @@ namespace Digits
                 {
                     for (int k = 0; k < newWeights[i][j].Count; k++)
                     {
-                        newWeights[i][j][k] *= (learningRate / batches.Count);
+                        weights[i][j][k] -= newWeights[i][j][k] * (learningRate / batches.Count);
                     }
-                    newBiases[i][j] *= (learningRate / batches.Count);
-                }
-            }
-
-            for (int i = 0; i < newWeights.Count; i++)
-            {
-                for (int j = 0; j < newWeights[i].Count; j++)
-                {
-                    for (int k = 0; k < newWeights[i][j].Count; k++)
-                    {
-                        weights[i][j][k] -= newWeights[i][j][k];
-                    }
-                    biases[i][j] -= newBiases[i][j];
+                    biases[i][j] -= newBiases[i][j]*(learningRate / batches.Count);
                 }
             }
             var zero = true;
@@ -389,6 +377,10 @@ namespace Digits
                             }
                             filters[i][j][k][n] -= (learningRate / (batches.Count)) * convolutionValues.Filters[i][j][k][n];
                         }
+                    }
+                    if ((learningRate / (100 * batches.Count)) * convolutionValues.Biases[i][j] != 0)
+                    {
+                        zero = false;
                     }
                     convolutionBiases[i][j] -= (learningRate / (100*batches.Count)) * convolutionValues.Biases[i][j];
                 }
@@ -439,7 +431,7 @@ namespace Digits
                     {
                         sigmoidOut += weights[i][j][k] * activations[i][k];
                     }
-                    layer.Add((sigmoidOut / 10.0) + biases[i][j]);
+                    layer.Add((sigmoidOut / weights[i][j].Count) + biases[i][j]);
                 }
 
                 zValues.Add(layer);
@@ -584,6 +576,7 @@ namespace Digits
                     input[i].Add(flattenInput[i * lines + j]);
                 }
             }
+
             var ps = new List<List<List<List<double>>>>() { new List<List<List<double>>>() { input } };
             var cs = new List<List<List<List<double>>>>();
             var zs = new List<List<List<List<double>>>>();
@@ -906,7 +899,7 @@ namespace Digits
             return Flatten(layer);
         }
 
-        public List<List<double>> Convolution(List<List<double>> input, List<List<double>> filter, double? bias = null)
+        public List<List<double>> Convolution(List<List<double>> input, List<List<double>> filter, double? bias = 0)
         {
             bias ??= 0;
             var result = new List<List<double>>();
@@ -923,7 +916,7 @@ namespace Digits
                             output += input[i + k][j + n] * filter[k][n];
                         }
                     }
-                    output /= filter.Count * filter.Count;
+                    //output /= filter.Count * filter.Count;
                     dot.Add((double)(output + bias));
                 }
                 result.Add(dot);
@@ -1035,7 +1028,7 @@ namespace Digits
                 for (int i = 0; i < 784; i++)
                 {
                     var b = brImages.ReadByte();
-                    pixels.Add(b / 255.0);
+                    pixels.Add(b / 256.0);
                     if (print)
                     {
                         Console.Write(b.ToString() + ", ");
@@ -1100,10 +1093,10 @@ namespace Digits
             Loader loader = new Loader();
             var result = loader.Load(60000);
 
-            var net = new Network("save.txt");
+            var net = new Network();
             for (int i = 0; i < 1; i++)
             {
-                net.StochasticGradientDescent(result.Data, result.Result, 30, 0.1, 20);
+                net.StochasticGradientDescent(result.Data, result.Result, 30, 3, 10);
             }
         }
     }
